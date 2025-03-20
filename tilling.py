@@ -38,8 +38,8 @@ def draw():
 
 if __name__ == "__main__":
     tool = Tools2D()
-    a = BruijnsSystem.BruijnsSystem(sides=5,gap=13,shifted_distance=21,origin_norm=30,max_num_of_line=1850)
-    b = BruijnsSystem.BruijnsSystem(sides=5,gap=13,shifted_distance=11,origin_norm=30,max_num_of_line=1850)
+    a = BruijnsSystem.BruijnsSystem(sides=5,gap=13,shifted_distance=21,origin_norm=30,max_num_of_line=850)
+    b = BruijnsSystem.BruijnsSystem(sides=5,gap=13,shifted_distance=11,origin_norm=30,max_num_of_line=850)
     #TODO 应该在在gird中把当前tilling的点画出来.
     print('Gird-finish')
     till = a.tilling
@@ -57,7 +57,6 @@ if __name__ == "__main__":
     seg_group =  till_b.WFS(500)
     for i in seg_group:
         tool.Segmentline_drop(i[0],i[1],color=py5.color(40,40,40,255))
-
     print(p)
     p_dict = {k:tool.point_dic[k] for k in p}
     sd = Screen_draw(py5)
