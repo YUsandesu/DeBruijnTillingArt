@@ -551,7 +551,7 @@ class Tools2D:
 
 
     @staticmethod
-    def reduce_errors(num, max_value=1e10, min_value=1e-10):  # TODO: to numpy -> clip
+    def reduce_errors(num, max_value=1e10, min_value=1e-10):
         """
         如果接近无穷大返回None，接近无穷小返回0
         """
