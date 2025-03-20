@@ -4,7 +4,7 @@ import sys
 import time
 import multiprocessing
 import gc
-from new_tiling.PY5_2DToolkit import Tools2D
+from PY5_2DToolkit import Tools2D
 import numpy as np
 import pandas as pd
 import warnings
@@ -317,7 +317,7 @@ class Tilling_Create:
         self.sorted_df = self._sorted_df()
         self.tilling_map_p = pd.DataFrame()
 
-    def get_direction_map(self) -> dict:
+    def get_trend_map(self) -> dict:
         """
         根据direction_vector来确定直线走向。
         定义如下：
@@ -345,19 +345,21 @@ class Tilling_Create:
                 continue
             r_d[i_[0]] = True
         return r_d
+
     @staticmethod
-    def sort(input_df, direction_dic):
+    def sort(input_df, trend_map:dict):
         the_dict = {}
         df_index = input_df.index
         for line_id, inter_list in input_df.items():
-            # print(inter_list)
+
             arr = np.array(inter_list.tolist())
+
             queue_p, indices, counts = np.unique(arr, axis=0, return_index=True, return_counts=True)
             # queue_p: 排序后的队列 (去重, 默认以 [x,y] 中的 x 排序, 如果相同, 以 y 排序)
             # indices: queue_p 中元素在原数组 arr 中的序号
             # counts: 每个元素在 arr 中出现的次数
-            # 获取没有nan的序号
-            valid_mask = np.where(~np.isnan(queue_p).any(axis=1))
+
+            valid_mask = np.where(~np.isnan(queue_p).any(axis=1))# 获取没有nan的序号
 
             # 同时过滤三个数组
             queue_p = queue_p[valid_mask]  # 过滤后的唯一值坐标
@@ -367,7 +369,7 @@ class Tilling_Create:
             same_v = queue_p[counts > 1]  # 取具有重复的点[x,y]
             same_id = indices[counts > 1]  # 重复点的index
 
-            if not direction_dic[line_id[0]]:
+            if not trend_map[line_id[0]]:
                 # 需要倒序
                 indices = indices[::-1]
 
@@ -409,15 +411,18 @@ class Tilling_Create:
                     - `[line_index]`: 单条线在此点相交。
                     - `[line_index_1, line_index_2, ...]`: 多条线在此点相交。
         """
-        d_map = self.get_direction_map()
+        d_map = self.get_trend_map()
 
         inter_num = len(self.inter_df)
         num = inter_num//500 if inter_num >1000 else 1
 
         if num >1:
-            print('start-cut')
-            df_chunks = np.array_split(self.inter_df, num, axis=1)
-            print('finish-cut')
+            cut_t = time.time()
+            # df_chunks = np.array_split(self.inter_df, num, axis=1) #纵向切割
+            chunk_size = int(np.ceil(self.inter_df.shape[1] / num))
+            df_chunks = [self.inter_df.iloc[:, i * chunk_size:(i + 1) * chunk_size] for i in range(num)]
+
+            print('finish-cut:',time.time()-cut_t)
         else:
             df_chunks = [self.inter_df]
 

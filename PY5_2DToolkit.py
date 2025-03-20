@@ -3,11 +3,6 @@ from collections import defaultdict
 import math
 import warnings
 
-from numba.cuda.simulator.reduction import reduce
-
-from log_tool import time_logger
-
-
 def read_32bit_color(bit32_color):
     """
     此函数将32位颜色提取成10进制数,范围0-255
@@ -2163,7 +2158,6 @@ class Screen_draw:
                                             stroke_weight=stroke_weight)
         return self.tools.get_Segmentline_dic()
 
-    @time_logger
     def screen_draw_lines(self, lines_dic, color=create_32bit_color(10, 10, 0, 255), stroke_weight=3):
         self.tools.reset()
         screen_info = self.screen_get_info()
