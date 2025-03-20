@@ -639,14 +639,6 @@ class Tilling_Create:
 
         return b_tilling
 
-
-
-
-
-
-
-
-
 def pd_print(df: pd.DataFrame, max_length=20, multi_index=False):
     """
     打印整个DataFrame，不论其大小，长值会被从中间缩略显示。
@@ -704,7 +696,6 @@ def deep_get_size(obj, seen=None):
         size += sum([deep_get_size(item, seen) for item in obj])
     # 可以根据需要添加其他容器类型的处理，例如自定义对象
     return size
-
 
 if __name__ == "__main__":
     a = BruijnsSystem(sides=5, max_num_of_line=20, shifted_distance=0)
