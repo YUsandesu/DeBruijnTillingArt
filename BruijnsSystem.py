@@ -53,11 +53,6 @@ class BruijnsSystem:
         self.tilling_object = None
 
     @property
-    def inter_point_list(self) -> list:
-        # TODO 还没有验证
-        return np.unique(np.array(self.interaction_df.dropna().to_numpy().tolist())).tolist()
-
-    @property
     def lines_dict_data(self) -> list:
         tittle = self.data_df.columns
         now_num_list = tittle[tittle.get_loc(0):]
@@ -165,6 +160,7 @@ class BruijnsSystem:
         print('loading_use:',time.time()-t_i)
 
         print('start_interaction')
+        #TODO 这里实际上对角线是相同的,这里重复计算了
         if self._inter_df.empty:
             inter_inf = np.around(tools.inter_line_group_np(lines_a=lines, lines_b=lines), 10)
             self._inter_df = pd.DataFrame(inter_inf.tolist(), columns=col, index=col)
@@ -314,7 +310,7 @@ class Tilling_Create:
     def __init__(self, map_df, inter_df):
         self.inter_df = inter_df
         self.map_df = map_df
-        self.sorted_df = self._sorted_df()
+        self.sorted_tilling_df,self.sorted_location_df = self._sorted_df()
         self.tilling_map_p = pd.DataFrame()
 
     def get_trend_map(self) -> dict:
@@ -345,10 +341,10 @@ class Tilling_Create:
                 continue
             r_d[i_[0]] = True
         return r_d
-
     @staticmethod
     def sort(input_df, trend_map:dict):
         the_dict = {}
+        the_dict_location={}
         df_index = input_df.index
         for line_id, inter_list in input_df.items():
 
@@ -389,11 +385,14 @@ class Tilling_Create:
                 [[df_index[_id] for _id in i_list] for i_list in indices]
                 + [np.NAN] * (len(df_index) - len(indices)) #保持维度一致,不然没法添加到dataframe
                 )
-            inf = [inter_list.iloc[i_list[0]] for i_list in indices]
-            #TODO
-            the_dict[line_id] = r
 
-        return the_dict
+            r_location = queue_p.tolist() + [np.NAN] * (len(df_index) - len(queue_p))
+
+            the_dict[line_id] = r
+            the_dict_location[line_id] = r_location
+
+        return the_dict,the_dict_location
+
     def _sorted_df(self):
         """
         Bruijns 系统中基于交点建立网格线邻接关系的关键预处理步骤。
@@ -415,14 +414,13 @@ class Tilling_Create:
 
         inter_num = len(self.inter_df)
         num = inter_num//500 if inter_num >1000 else 1
+        cut_t = time.time()
 
         if num >1:
-            cut_t = time.time()
             # df_chunks = np.array_split(self.inter_df, num, axis=1) #纵向切割
             chunk_size = int(np.ceil(self.inter_df.shape[1] / num))
             df_chunks = [self.inter_df.iloc[:, i * chunk_size:(i + 1) * chunk_size] for i in range(num)]
-
-            print('finish-cut:',time.time()-cut_t)
+            print('dataframe-cut:',time.time()-cut_t,'multi-process:',num)
         else:
             df_chunks = [self.inter_df]
 
@@ -430,64 +428,27 @@ class Tilling_Create:
         results = Parallel(n_jobs=num)(
             delayed(self.sort)(chunk, d_map) for chunk in df_chunks
         )  # backend="threading"
+        print('sorted-finish:',time.time()-cut_t)
 
         # 合并各个分块返回的字典结果
         walk_dict = {}
-        for i in results:
-            walk_dict = walk_dict | i
+        location_dict = {}
+        for _dict,l_dict in results:
+            walk_dict = walk_dict | _dict
+            location_dict = location_dict | l_dict
 
-        return pd.DataFrame(walk_dict).dropna(how='all')
+        return pd.DataFrame(walk_dict).dropna(how='all'),pd.DataFrame(location_dict).dropna(how='all')
 
-
-    @property
-    def _center_point(self)->tuple:
-        """
-        函数功能:
-            从 self.inter_df 中筛选出列名第一个元素为 0 的列，
-            然后计算这些列中各行与坐标 [100, 100] 的欧几里得距离，
-            最后返回距离最小值对应的 (行索引, 列名称)。
-
-        返回:
-            (row_index, column_name)
-        """
-
-        # 将所有列名转换为 NumPy 数组
-        p_col = self.inter_df.columns.to_numpy()
-
-        # 创建一个向量化函数，用于获取列名的第一个元素
-        # 假设列名可迭代并且第一个元素可以被索引到
-        extract_first_elem = np.vectorize(lambda x: x[0])
-
-        # 提取所有列名中的第一个元素
-        first_elements = extract_first_elem(p_col)
-
-        # 在 first_elements 中查找等于 0 的索引位置
-        indices = np.where(first_elements == 0)
-
-        # 根据索引拿到对应的列名，转换为列表
-        target_columns = p_col[indices].tolist()
-
-        # 获取这些目标列的数据并转换为 NumPy 数组
-        data_array = np.array(self.inter_df.loc[:, target_columns].to_numpy().tolist())
-
-        # 计算与点 [100, 100] 的欧几里得距离（按行计算）
-        distances = np.linalg.norm(data_array - np.array([100, 100]), axis=-1)
-
-        # 获取距离最小值在展平后的索引位置
+    def _get_center(self, c_point: list | tuple):
+        ln = len(self.sorted_location_df)
+        inter_list = self.sorted_location_df.dropna().to_numpy().tolist()
+        inter_list = [i+(ln-len(i))*[np.inf,np.inf] for i in inter_list]
+        inter_list = np.array(inter_list)
+        distances = np.linalg.norm(inter_list - np.array(c_point), axis=-1)
         flat_min_index = np.nanargmin(distances)
-
         # 将展平索引转换为 (行, 列) 的二维索引
         min_row_idx, min_col_idx = np.unravel_index(flat_min_index, distances.shape)
-
-        # 获取对应的行索引和列名
-        row_index = self.inter_df.index[min_row_idx]
-        col_name = target_columns[min_col_idx]
-
-        s_i = np.where(
-            self.sorted_df.loc[:, col_name].apply(lambda x: row_index in x if isinstance(x, list) else False))
-
-        # 返回最小值对应的 (行索引, 列名称)
-        return int(s_i[0][0]),col_name
+        return min_col_idx,self.sorted_location_df.columns[min_col_idx]
 
     def _get_tilling_shape(self, vectors_id_list):
         """
@@ -520,7 +481,7 @@ class Tilling_Create:
 
     def _loc_to_tilling_shape(self, loc):
         index, id_tup = loc
-        inter_info = self.sorted_df.loc[index, id_tup] + [id_tup] #得带上id_tup自己 #TODO 会超出范围
+        inter_info = self.sorted_tilling_df.loc[index, id_tup] + [id_tup] #得带上id_tup自己 #TODO 会超出范围
         vectors_list = self._line_tups_to_vectors_id(inter_info)
         return self._get_tilling_shape(vectors_list)
 
@@ -588,10 +549,10 @@ class Tilling_Create:
         """
         r=[]
         _index,line_tup = loc
-        other_col = self.sorted_df.loc[_index,line_tup]
+        other_col = self.sorted_tilling_df.loc[_index,line_tup]
         # print(other_col)
         for col in other_col:
-            bool_list = self.sorted_df.loc[:, col].dropna().apply(lambda x: line_tup in x).to_numpy()
+            bool_list = self.sorted_tilling_df.loc[:, col].dropna().apply(lambda x: line_tup in x).to_numpy()
             if np.all(bool_list==False):
                  continue
             _index = np.where(bool_list)[0][0] #查找位置
@@ -602,7 +563,7 @@ class Tilling_Create:
         return None
 
     def WFS(self, deep:int=100):
-        loc = self._center_point #找到起点
+        loc = self._get_center([100, 100]) #找到起点
         print('=='*15)
         print(f'开始:{loc}')
         now_loc,data = self.unique_tilling(loc) #(当前点的所有名称,起点形状)
@@ -747,11 +708,7 @@ def deep_get_size(obj, seen=None):
 
 if __name__ == "__main__":
     a = BruijnsSystem(sides=5, max_num_of_line=20, shifted_distance=0)
-    a(sides=5, max_num_of_line=5000, shifted_distance=0,gap=12)
+    a(sides=5, max_num_of_line=500, shifted_distance=120,gap=12)
     t= a.tilling
-    p = t._center_point
-    n_d,f_d = t._next_loc_list(p)
-    # print('next_data:',f_d)
-    # print('next_data[0]_tilling_shape',t._one_next_data_to_tilling_shapes(f_d[0]))
     print(t.WFS(9))
     print(t.WFS(10))
