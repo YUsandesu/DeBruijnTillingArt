@@ -1,11 +1,8 @@
 import numpy as np
-from collections import defaultdict
 import math
 import warnings
 import shapely
 import pandas as pd
-from dask.dataframe.dispatch import tolist
-
 
 def read_32bit_color(bit32_color):
     """
@@ -19,7 +16,6 @@ def read_32bit_color(bit32_color):
     blue = bit32_color & 0xFF  # 提取蓝色通道
     return red, green, blue, alpha
 
-
 def create_32bit_color(r, g, b, a=255):
     """
     此函数接收红、绿、蓝和 alpha 通道的值，并将其组合成一个 32 位的颜色值。
@@ -31,9 +27,6 @@ def create_32bit_color(r, g, b, a=255):
 
 
 class Tools2D:
-    def __init__(self, screen_info=None):
-        if screen_info:
-            self.screeninfo = screen_info
 
     class vector:
         def __init__(self, point_b,point_a=(0, 0)):
@@ -102,6 +95,12 @@ class Tools2D:
 
         def to_list(self):
             return [self.v_x, self.v_y]
+
+    class vectors:
+        def __init__(self):
+            raise
+        def __add__(self, other):
+            raise
 
     class point:
         def __init__(self,point:list|tuple|np.ndarray):
@@ -469,16 +468,56 @@ class Tools2D:
         def __int__(self,style='sketch'):
             raise
 
+    def interaction(self,a,b):
+        raise
 
-    def distance_2_points_matrix(self, Apoint, Bpoint):
+    def distance(self,a,b):
+        raise
+
+    @staticmethod
+    def reduce_errors_np(nums: list | np.ndarray, min_value:float|None = 1e-10, max_value:float|None = 1e10):
         """
-        矩阵方法求norm 使用的是np矩阵
+        减少ndarray,list,tuple中的数值误差
+        1. 将绝对值小于min_value的值设置为零。
+        2. 将绝对值大于max_value的值设置为 NaN（非数字）。
+
+        Args:
+           nums (list | np.ndarray): 要处理的目标
+           min_value (None | float, 可选): 阈值，默认为 1e-10,低于此阈值（绝对值）的值被认为接近于零。
+                                               如果设置为None，则跳过此最小值减少步骤。 默认为 1e-10。
+           max_value (None | float, 可选): 同上,默认为 1e10
+
+        Returns:np.ndarray
+
+        Raises:
+           ValueError: 输入nums不是list,tuple or ndarray
+
         """
-        A = self.point_get_info(Apoint)['location']
-        B = self.point_get_info(Bpoint)['location']
-        np_A = np.array(A)
-        np_B = np.array(B)
-        return np.linalg.norm(np_A - np_B)
+        if isinstance(nums,np.ndarray):
+            back_np = nums
+        elif isinstance(nums,(list,tuple)):
+            back_np = np.array(nums)
+        else:
+            raise ValueError (f"输入值类型错误:{nums},type:{type(nums)}")
+
+        if min_value:
+            back_np = np.where(np.abs(nums) < min_value, 0, back_np)
+        if max_value:
+            back_np = np.where(np.abs(nums) > max_value, np.nan, back_np)
+        return back_np
+
+    @staticmethod
+    def reduce_errors(num, max_value=1e10, min_value=1e-10):
+        """
+        如果接近无穷大返回None，接近无穷小返回0
+        """
+        if abs(num) > max_value:
+            return None
+        elif abs(num) < min_value:
+            return 0
+        return num
+
+    #=========================
 
     def distance_2_points(self, point1, point2):
         """
@@ -555,143 +594,6 @@ class Tools2D:
 
         return rotated_vector
 
-    @staticmethod
-    def reduce_errors_np(nums: list | np.ndarray, min_value:float|None = 1e-10, max_value:float|None = 1e10):
-        """
-        减少ndarray,list,tuple中的数值误差
-        1. 将绝对值小于min_value的值设置为零。
-        2. 将绝对值大于max_value的值设置为 NaN（非数字）。
-
-        Args:
-           nums (list | np.ndarray): 要处理的目标
-           min_value (None | float, 可选): 阈值，默认为 1e-10,低于此阈值（绝对值）的值被认为接近于零。
-                                               如果设置为None，则跳过此最小值减少步骤。 默认为 1e-10。
-           max_value (None | float, 可选): 同上,默认为 1e10
-
-        Returns:np.ndarray
-
-        Raises:
-           ValueError: 输入nums不是list,tuple or ndarray
-
-        """
-        if isinstance(nums,np.ndarray):
-            back_np = nums
-        elif isinstance(nums,(list,tuple)):
-            back_np = np.array(nums)
-        else:
-            raise ValueError (f"输入值类型错误:{nums},type:{type(nums)}")
-
-        if min_value:
-            back_np = np.where(np.abs(nums) < min_value, 0, back_np)
-        if max_value:
-            back_np = np.where(np.abs(nums) > max_value, np.nan, back_np)
-        return back_np
-
-
-    @staticmethod
-    def reduce_errors(num, max_value=1e10, min_value=1e-10):
-        """
-        如果接近无穷大返回None，接近无穷小返回0
-        """
-        if abs(num) > max_value:
-            return None
-        elif abs(num) < min_value:
-            return 0
-        return num
-
-
-    def vector_to_line(self, vector, passing_point=(0, 0), temp=False):
-        """
-        passing_point,直线经过的点，默认(0，0)
-        向量换直线,返回的是字母代号。如果temp=True 返回字典。
-        """
-        if self.reduce_errors(vector[0]) == 0 and self.reduce_errors(vector[1]) == 0:
-            return None
-        if self.reduce_errors(vector[0]) == 0:
-            # 垂直情况
-            # x=b ; k=-1 a=0
-            return self.line_drop(a=0, k=-1, b=passing_point[0])
-        if self.reduce_errors(vector[1]) == 0:
-            # 水平情况
-            # y=b ;a=1 k=0
-            return self.line_drop(a=1, k=0, b=passing_point[1])
-
-        k = self.reduce_errors(vector[1] / vector[0])
-        if k is None:
-            a = 0  # 无穷小
-        else:
-            a = 1
-        b = self.line_solve_general(a=a, x=passing_point[0], y=passing_point[1], k=k)['b']
-        return self.line_drop(a=a, k=k, b=b, temp=temp)
-
-
-    def line_shift(self, line_letter_or_dic, vector, rewrite=True, drop=True):
-        """
-            对line或directed_line进行平移操作。
-
-            参数:
-                line_letter_or_dic (str or dict): 直线的标识符（字符串）或直线的详细信息（字典）。
-                vector (tuple or list): 平移向量[x,y]
-                rewrite (bool): 是否更新 self.line_dic 中的直线信息。
-                drop (bool): 当前直线还未创建,创建一个新的直线对象。
-        """
-        k = None
-        if not isinstance(vector, (tuple, list)) or len(vector) != 2:
-            raise ValueError(f"平移向量错误,当前为{vector}")
-
-        if isinstance(line_letter_or_dic, str):
-            detail = self.line_dic[line_letter_or_dic].copy()
-            letter = line_letter_or_dic
-        elif isinstance(line_letter_or_dic, dict):
-            detail = line_letter_or_dic.copy()
-            letter = None
-        else:
-            raise ValueError(f"输入直线错误,为{line_letter_or_dic}")
-
-        if 'directed' in detail:  # 获取有向线段
-            location_x, location_y = detail['location_point']
-            detail['location_point'] = [location_x + vector[0], location_y + vector[1]]
-
-        elif 'a' in detail:
-            # x=b
-            a = detail['a']
-            k = -1
-            new_b = detail['b'] + vector[0]
-            detail['b'] = new_b
-            detail['str'] = f'x={round(new_b, 2)}'
-            if drop:
-                return self.line_drop(k=k, b=new_b, a=a)
-
-        else:  # 处理普通直线（y = kx + b 或水平线 y = b）
-            b = detail['b']
-            k = detail['k']
-
-            if k == 0:  # 水平线（y = original_b）
-                # y=b
-                new_b = detail['b'] + vector[1]
-                detail['str'] = f'y={round(new_b, 2)}'
-            else:
-                new_b = b + vector[1] - k * vector[0]  # (y-v1)=k(x-v0)+b-->y=kx - k*v0 + v1 +b -->b -k*v0 + v1
-                if new_b > 0: detail['str'] = f'y={round(k, 2)}x+{round(new_b, 2)}'
-                if new_b == 0: detail['str'] = f'y={round(k, 2)}x'
-                if new_b < 0: detail['str'] = f'y={round(k, 2)}x{round(new_b, 2)}'
-            detail['b'] = new_b
-
-        if letter and rewrite:
-            # 更新 self.line_dic 中的直线信息
-            self.line_dic[letter] = detail
-            return letter
-
-        if drop:  # 返回新的直线对象
-            if 'directed' in detail:
-                return self.directed_line_drop(detail['location_point'], detail['direction_vector'])
-            if k:
-                return self.line_drop(k=detail.get('k'), b=detail['b'], a=detail.get('a', 1))
-
-        else:  # 返回更新后的直线详细信息
-            return detail
-
-
     # ////////////《线操作》////////////
 
     def directed_line_to_line(self, line_letter_or_detail_dic, temp=True):
@@ -715,7 +617,6 @@ class Tools2D:
             k = vy / vx
             b = ly - k * lx
             return self.line_drop(a=1, k=k, b=b, temp=temp)
-
 
     def inter_line_group_np(self,lines_a:list,lines_b:list, x_range: list | tuple = None, y_range: list | tuple = None):
         """
@@ -771,130 +672,6 @@ class Tools2D:
         inter_points_np[final_mask, 0] = self.reduce_errors_np(x[final_mask] / w[final_mask])  # 计算 x' = x / w
         inter_points_np[final_mask, 1] = self.reduce_errors_np(y[final_mask] / w[final_mask])  # 计算 y' = y / w
         return inter_points_np
-
-    def intersection_2_Segmentline_Matrix(self, Aline, Bline):
-        """
-         使用矩阵方法 numpy 计算两条线段的交点
-        :param Aline: 线段 A 的起点和终点坐标 [(x1, y1), (x2, y2)]
-        :param Bline: 线段 B 的起点和终点坐标 [(x3, y3), (x4, y4)]
-        :return: 交点坐标 (x, y)，如果没有交点返回 None
-        """
-
-        x1, y1 = Aline[0]
-        x2, y2 = Aline[1]
-        x3, y3 = Bline[0]
-        x4, y4 = Bline[1]
-
-        # 创建系数矩阵 A@缩小量=b
-        A = np.array([[x2 - x1, x3 - x4], [y2 - y1, y3 - y4]])
-        b = np.array([x3 - x1, y3 - y1])
-
-        # 计算行列式
-        det = np.linalg.det(A)
-
-        # 判断是否平行或共线
-        if abs(det) < 1e-10:  # 行列式接近 0，表示两条线段平行或共线
-            return None
-
-        # 解线性方程组
-        t, s = np.linalg.solve(A, b)
-
-        # 判断参数 t 和 s 是否在 [0, 1] 范围内
-        if 0 <= t <= 1 and 0 <= s <= 1:
-            # 计算交点坐标
-            intersection_x = x1 + t * (x2 - x1)
-            intersection_y = y1 + t * (y2 - y1)
-            return (intersection_x, intersection_y)
-
-        return None  # 如果 t 或 s 不在范围内，则没有交点
-
-    def intersection_2_Segmentline(self, A_seg_Chain_or_2pointxy, B_seg_Chain_or_2pointxy):
-        """
-        查找两条线段的交点，返回交点坐标或 None。
-        支持混用链和点表示方式。
-
-        参数:
-        A_seg_Chain_or_2pointxy: 可以是链 (如 'A-B') 或两个点的列表 [[x, y], [x, y]]。
-        B_seg_Chain_or_2pointxy: 可以是链或两个点的列表。
-
-        返回:
-        tuple: 交点坐标 (x, y) 或 None。
-
-        异常:
-        ValueError: 未找到线段或输入格式错误。
-        """
-        A_info = self.Segmentline_get_info(A_seg_Chain_or_2pointxy)
-        if A_info is None:
-            raise ValueError(f"没有找到A线段{A_seg_Chain_or_2pointxy}")
-        Ax1, Ay1 = A_info['location'][0]
-        Ax2, Ay2 = A_info['location'][1]
-        B_info = self.Segmentline_get_info(B_seg_Chain_or_2pointxy)
-
-        if B_info is None:
-            raise ValueError(f"没有找到线段{B_seg_Chain_or_2pointxy}")
-        Bx1, By1 = B_info['location'][0]
-        Bx2, By2 = B_info['location'][1]
-
-        # 特殊输入情况 防止报错
-        if Bx1 == Bx2 and By1 == By2 and Ax1 == Ax2 and Ay1 == Ay2:
-            # raise ValueError('输入了一个点')
-            return Ax1, Ay1
-        if Bx1 == Bx2 and By1 == By2:
-            # raise ValueError('B线是一个点')
-            temp_line_letter = self.Segmentline_to_line([A_seg_Chain_or_2pointxy[0], A_seg_Chain_or_2pointxy[1]])
-            if By1 == self.line_solve(temp_line_letter, x=Bx1) and Bx1 == self.line_solve(temp_line_letter, y=By1):
-                self.line_remove(temp_line_letter)
-                return Bx1, By1
-            else:
-                self.line_remove(temp_line_letter)
-                return None
-        if Ax1 == Ax2 and Ay1 == Ay2:
-            # raise ValueError('A线是一个点')
-            temp_line_letter = self.Segmentline_to_line([B_seg_Chain_or_2pointxy[0], B_seg_Chain_or_2pointxy[1]])
-            if Ay1 == self.line_solve(temp_line_letter, x=Ax1) and Ax1 == self.line_solve(temp_line_letter, y=Ay1):
-                self.line_remove(temp_line_letter)
-                return Ax1, Ay1
-            else:
-                self.line_remove(temp_line_letter)
-                return None
-
-        # 检查线段投影范围是否重叠（快速排除法）
-        rangeX = max(min(Ax1, Ax2), min(Bx1, Bx2)), min(max(Ax1, Ax2), max(Bx1, Bx2))
-        rangeY = max(min(Ay1, Ay2), min(By1, By2)), min(max(Ay1, Ay2), max(By1, By2))
-        if rangeX[0] > rangeX[1] or rangeY[0] > rangeY[1]:
-            return None  # 没有重叠，线段不可能相交
-
-        # 计算直线的斜率和截距
-        if Ax1 == Ax2:  # 第一条线和y轴水平
-            k_A, b_A = None, Ax1
-        else:
-            k_A = (Ay1 - Ay2) / (Ax1 - Ax2)
-            b_A = Ay1 - k_A * Ax1
-        if Bx1 == Bx2:  # 第二条线和y轴水平
-            k_B, b_B = None, Bx1
-        else:
-            k_B = (By1 - By2) / (Bx1 - Bx2)
-            b_B = By1 - k_B * Bx1
-
-        # 检查是否平行
-        if k_A is None:  # 第一条线垂直
-            x = Ax1
-            y = k_B * x + b_B
-        elif k_B is None:  # 第二条线垂直
-            x = Bx1
-            y = k_A * x + b_A
-        else:
-            if abs(k_A - k_B) < 1e-10:  # 斜率相等，平行，不可能有交点
-                return None
-            # 计算交点
-            x = (b_B - b_A) / (k_A - k_B)
-            y = k_A * x + b_A
-
-        # 检查交点是否在两条线段的范围内
-        if rangeX[0] <= x <= rangeX[1] and rangeY[0] <= y <= rangeY[1]:
-            return x, y
-        else:
-            return None  # 交点不在线段范围内
 
     def intersection_line_and_Segmentline(self, segline_chain, line='a'):
         """
@@ -985,7 +762,6 @@ class Tools2D:
         point = [point_x, point_y]
         point_inter = self.intersection_2line(line_orth_dic, detail_line_dic)
         return self.distance_2_points(point, point_inter)
-
 
     # ////////////《面操作》////////////
     def surface_drop_by_chain(self, chain_of_point, floor=0, color=create_32bit_color(200, 200, 20, 255), fill=False,
