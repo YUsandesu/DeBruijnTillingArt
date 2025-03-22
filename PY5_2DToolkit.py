@@ -176,7 +176,12 @@ class Tools2D:
                 else:
                     return None
 
+        @property
+        def range_x(self):
+            return np.sort(self.to_numpy()[:,0])
+
     class segment_group:
+
         def __init__(self, *args):
             self.sl_group = []
             for i in args:
@@ -241,11 +246,27 @@ class Tools2D:
         def to_list(self):
             return self.sl_group.tolist()
 
+        def range_x(self):
+            # 提取每个线段的 x 坐标，形状为 (N, 2)
+            x_matrix = self.sl_group[:, :, 0]
+            x_matrix = np.sort(x_matrix, axis=1)
+            # 返回的矩阵:
+            # +------------------+
+            # | [min_x1, max_x1] |  --> 线段 1 的 x 范围
+            # | [min_x2, max_x2] |  --> 线段 2 的 x 范围
+            # | ...              |  --> ...
+            # | [min_xN, max_xN] |  --> 线段 N 的 x 范围
+            # +------------------+
+            return x_matrix
+
+        def interaction(self):
+            #TODO line_group,line|segment_group,segment_line|direct_gourp,direct_line|
+            raise
+
     class line:
         """
         ax+by+c=0
         """
-
         def __init__(self, a=None, b=None, c=None, point_a=None, point_b=None, direct_point=None, *args):
             """
             初始化直线，可以通过以下方式：
@@ -406,13 +427,48 @@ class Tools2D:
                     self.lines.append(i.to_numpy())
             self.lines = np.array(self.lines)
 
+        def shift(self, vector):
+            if isinstance(vector, Tools2D.vector):
+                vector = vector.to_numpy()
+            else:
+                vector = Tools2D.vector(vector).to_numpy()
+            dx, dy = vector
+            self.lines[:, 2] = self.lines[:, 2] - self.lines[:, 0] * dx - self.lines[:, 1] * dy
+            return self
+
+        def interaction(self):
+            # TODO line_group,line|segment_group,segment_line|direct_gourp,direct_line|
+            raise
+
     class direct_line:
-        def __init__(self):
+        def __init__(self,d_vector,l_point):
+            raise
+        def interaction(self):
+            # TODO 这时返回需要分为(positive,negative)
+            # TODO 可以使用Geo的Ray
             raise
 
     class direct_line_group:
-        def __init__(self):
+        def __init__(self,*args):
             raise
+
+        def interaction(self):
+            # TODO line_group,line|segment_group,segment_line|direct_gourp,direct_line|
+            # TODO 这时返回需要分为(positive,negative)
+            raise
+
+    class curve:
+        def __init__(self,curve_type='Bezier',*args):
+            if curve_type:
+                raise
+            raise
+        def curve(self,*args):
+            raise
+
+    class surface:
+        def __int__(self,style='sketch'):
+            raise
+
 
     def distance_2_points_matrix(self, Apoint, Bpoint):
         """
@@ -799,7 +855,6 @@ class Tools2D:
 
         return None  # 如果 t 或 s 不在范围内，则没有交点
 
-
     def intersection_2_Segmentline(self, A_seg_Chain_or_2pointxy, B_seg_Chain_or_2pointxy):
         """
         查找两条线段的交点，返回交点坐标或 None。
@@ -888,7 +943,6 @@ class Tools2D:
         else:
             return None  # 交点不在线段范围内
 
-
     def intersection_line_and_Segmentline(self, segline_chain, line='a'):
         """
         经典方法 查找两条线段交点，无交点返回None
@@ -951,124 +1005,6 @@ class Tools2D:
                 return [value_x, value_y]
             else:
                 return None
-
-
-    def intersection_2line(self, Aline_letter_or_kba_dic, Bline_letter_or_kba_dic):
-        """
-        :param Aline_letter_or_kba_dic: 可以是代号，也可以是save_line(temp=true)的返回值：一个包含k，b，a的字典
-        :param Bline_letter_or_kba_dic: 可以是代号，也可以是save_line(temp=true)的返回值：一个包含k，b，a的字典
-        返回值:[x,y]
-        """
-
-        # 判断是id还是dict
-        if isinstance(Aline_letter_or_kba_dic, str):
-            detail_dicA = self.line_dic[Aline_letter_or_kba_dic]
-        else:
-            detail_dicA = Aline_letter_or_kba_dic
-        if isinstance(Bline_letter_or_kba_dic, str):
-            detail_dicB = self.line_dic[Bline_letter_or_kba_dic]
-        else:
-            detail_dicB = Bline_letter_or_kba_dic
-
-        # 判断是否为有向直线,转化为函数
-        if 'directed' in detail_dicA and detail_dicA['directed'] is True:
-            detail_dicA = self.directed_line_to_line(detail_dicA, temp=True)
-        if 'directed' in detail_dicB and detail_dicB['directed'] is True:
-            detail_dicB = self.directed_line_to_line(detail_dicB, temp=True)
-
-        k_A = detail_dicA['k']
-        b_A = detail_dicA['b']
-        k_B = detail_dicB['k']
-        b_B = detail_dicB['b']
-
-        if 'a' in detail_dicA:
-            if 'a' in detail_dicB:
-                return None
-            x = detail_dicA['b']  # 直接取b的值，而非b/k
-            y = k_B * x + b_B
-        elif 'a' in detail_dicB:
-            x = detail_dicB['b']
-            y = k_A * x + b_A
-        elif k_A == k_B:
-            return None
-        else:
-            x = (b_B - b_A) / (k_A - k_B)
-            y = k_A * x + b_A
-
-        return [x, y]
-
-
-    def Segmentline_shadow_on_axis(self, Chain_or_2pointxy):
-        """
-        求一条线段分别在x轴和y轴的投影
-        :param Chain_or_2pointxy: 既可以是A-B形式 也可以是[x,y][x,y]
-        :return: 返回一个列表，包含两个范围[[x_min, x_max], [y_min, y_max]]
-        """
-        Seg_info = self.Segmentline_get_info(Chain_or_2pointxy)
-        if Seg_info is None:
-            raise ValueError(f"查找{Chain_or_2pointxy}失败")
-        x1, y1 = Seg_info['location'][0]
-        x2, y2 = Seg_info['location'][1]
-        x_range = [min(x1, x2), max(x1, x2)]
-        y_range = [min(y1, y2), max(y1, y2)]
-        return [x_range, y_range]
-
-
-    def Segmentline_to_line(self, chain_or_2pointxy, back_range=False, temp=False):
-        """
-        将由字符串 "A-B" 或者两个点的列表 [[x1, y1], [x2, y2]] 定义的线段转换为直线表示。
-
-        :param chain_or_2pointxy: 可以是定义线段的字符串（例如 'A-B'），也可以是两个点的列表：[[Ax, Ay], [Bx, By]]。
-        :param back_range: 如果为 True，返回额外的边界范围 [[xmin, xmax], [ymin, ymax]]。
-        :param temp: 内部使用的临时参数（默认为 False）。
-        :return: 表示直线的代号。
-                 如果 back_range 为 True，返回一个包含 (line_code, bounding_box) 的元组。
-
-        异常:
-            ValueError: 如果定义的线段实际上是一个点，而不是线段。
-
-        如果线段是垂直的，直线表示为 (0, x, -1)。
-        如果线段是水平的，直线表示为 (1, y, 0)。
-        否则，直线表示为 (1, 斜率, y_截距)。
-
-        相关信息存储在 `line_dic` 字典中，以返回的代号为键。
-
-        示例用法:
-            line_code = obj.Segmentline_to_line('A-B')
-            line_code, range = obj.Segmentline_to_line([[0, 0], [2, 2]], back_range=True)
-        """
-
-        if isinstance(chain_or_2pointxy, str):
-            Aletter, Bletter = chain_or_2pointxy.split('-')
-            x1, x2 = self.point_dic[Aletter][0], self.point_dic[Bletter][0]
-            y1, y2 = self.point_dic[Aletter][1], self.point_dic[Bletter][1]
-        else:
-            x1, y1 = chain_or_2pointxy[0]
-            x2, y2 = chain_or_2pointxy[1]
-
-        if x1 == x2 and y1 == y2:
-            raise ValueError('is not a line,this is a point')
-
-        if x1 == x2:
-            a = 0
-            b = x1
-            k = -1
-        elif y1 == y2:
-            a = 1
-            k = 0
-            b = y1
-        else:
-            a = 1
-            k = (y1 - y2) / (x1 - x2)
-            b = y1 - k * x1
-
-        back = self.line_drop(k, b, a, temp)
-        if back_range is True:
-            the_range = self.Segmentline_shadow_on_axis(chain_or_2pointxy)
-            back = back, the_range
-
-        return back
-
 
     def distance_point_to_line(self, point, line):
         # linedic例子:{'a': {'str': 'y=3x+100', 'k': 3, 'b': 100}}
