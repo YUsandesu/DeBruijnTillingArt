@@ -716,53 +716,6 @@ class Tools2D:
             b = ly - k * lx
             return self.line_drop(a=1, k=k, b=b, temp=temp)
 
-    def _trans_line_to_matrix(self, line)-> np.ndarray:
-        """
-        将直线表示转换为矩阵形式（齐次坐标系下的直线方程系数）。
-
-        Args:
-            line: 可以是以下类型之一：
-                - dict: 包含直线参数 {'k': 斜率, 'b': 截距}，可选 'a'（默认为 0）。
-                - list: 包含多条直线表示（dict 或 id）的列表。
-                - str/int/...: line_dic 中的直线 ID（不可变对象）。
-
-        Returns:
-            np.ndarray: 直线方程的系数矩阵 [k, -a, b]。
-                - 对于单一输入，返回形状为 (3,) 的数组。
-                - 对于列表输入，返回形状为 (N, 3) 的数组，其中 N 是直线数量。
-
-        Raises:
-            ValueError: 如果输入的 line ID 未在 line_dic 中找到。
-
-        Notes:
-            - 将直线方程 y=kx+b 表示为系数向量 [k, -a, b]。
-            - 支持批量处理多条直线的转换。
-
-        """
-        def extract_np(l_d:dict)-> np.ndarray:
-            if 'directed' not  in l_d:
-                a = 0 if 'a' in l_d else 1
-                k, b = l_d['k'], l_d['b']
-                return np.array([k, -a, b])
-            else:
-                return extract_np(self.directed_line_to_line(l_d,temp=True))
-        if isinstance(line, list):
-            matrix_list = []
-            for item in line:
-                if isinstance(item, dict):
-                    matrix_list.append(extract_np(item))
-                else:
-                    if item in self.line_dic:
-                        matrix_list.append(extract_np(self.line_dic[item]))
-                    else:
-                        raise ValueError(f'line_dic中,没有找到id{item},完整输入:{line}')
-            return np.array(matrix_list)  # Returns a NumPy array of matrices (stacked along axis 0)
-        if isinstance(line, dict):
-            return extract_np(line)
-        if line in self.line_dic:
-            return extract_np(self.line_dic[line])
-        else:
-            raise ValueError (f'line_dic中,没有找到id{line}')
 
     def inter_line_group_np(self,lines_a:list,lines_b:list, x_range: list | tuple = None, y_range: list | tuple = None):
         """
