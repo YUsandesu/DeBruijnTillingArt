@@ -203,6 +203,160 @@ class Tools2D:
             self.x_range = x_range
             self.y_range = y_range
 
+    class Line:
+        """
+        ax+by+c=0
+        """
+        def __init__(self, a=None, b=None, c=None, point_a=None, point_b=None, direct_point=None, *args):
+            """
+            初始化直线，可以通过以下方式：
+            1. 直接指定 a, b, c
+            2. 通过两点 point_a 和 point_b
+            3. 通过一点 point_a 和方向向量 direct_point
+            """
+            # 情况 1：直接提供 a, b, c
+            if a is not None and b is not None and c is not None:
+                if a == 0 and b == 0:
+                    raise ValueError("a 和 b 不能同时为 0，无法定义直线")
+                self.a = float(a)
+                self.b = float(b)
+                self.c = float(c)
+
+            # 情况 2：通过两点 point_a 和 point_b 定义直线
+            elif point_a is not None and point_b is not None:
+                # 转换为 NumPy 数组，确保输入是可计算的
+                p1 = np.array(point_a, dtype=float)
+                p2 = np.array(point_b, dtype=float)
+                if np.array_equal(p1, p2):
+                    raise ValueError("两点重合，无法定义直线")
+                # 两点式推导 ax + by + c = 0
+                # 设 point_a = (x1, y1), point_b = (x2, y2)
+                # a = y1 - y2, b = x2 - x1, c = x1y2 - x2y1
+                self.a = p1[1] - p2[1]  # y1 - y2
+                self.b = p2[0] - p1[0]  # x2 - x1
+                self.c = p1[0] * p2[1] - p2[0] * p1[1]  # x1*y2 - x2*y1
+                if self.a == 0 and self.b == 0:
+                    raise ValueError("计算结果无效，直线参数错误")
+
+            # 情况 3：通过一点 point_a 和方向向量 direct_point 定义直线
+            elif point_a is not None and direct_point is not None:
+                # 转换为 NumPy 数组
+                p = np.array(point_a, dtype=float)
+                d = np.array(direct_point, dtype=float)
+                if np.all(d == 0):
+                    raise ValueError("方向向量不能为零向量")
+                # 方向向量 (dx, dy) 的法向量是 (-dy, dx)
+                # 直线方程：-dy(x - x0) + dx(y - y0) = 0
+                self.a = -d[1]  # -dy
+                self.b = d[0]  # dx
+                self.c = d[1] * p[0] - d[0] * p[1]  # -dy*x0 + dx*y0
+                if self.a == 0 and self.b == 0:
+                    raise ValueError("计算结果无效，直线参数错误")
+
+            else:
+                raise ValueError("参数不足，请提供 a,b,c 或 point_a,point_b 或 point_a,direct_point")
+
+        def __str__(self):
+            """返回直线方程的字符串表示"""
+            if self.k is not None:
+                _b = self._kxb_b
+                if _b>0:
+                    return f'y={self.k}x+{_b}'
+                elif _b<0:
+                    return f'y={self.k}x{_b}'
+                else:
+                    return f'y={self.k}x'
+            else:
+                return f'x={-self.c/self.a}'
+
+        @property
+        def k(self):
+            """计算斜率，如果垂直则返回 None"""
+            if self.b == 0:
+                return None  # 垂直线，斜率无穷大
+            return -self.a / self.b
+        @property
+        def _kxb_b(self):
+            if self.b == 0:
+                return None  # 垂直线
+            return  -self.c/self.b
+
+        def intersects(self, other):
+            """计算与另一条直线的交点，若平行则返回 None"""
+            if not isinstance(other, Tools2D.Line):
+                raise TypeError(f"必须与另一条直线对象比较,当前:{other}")
+            # 解线性方程组：a1x + b1y + c1 = 0 和 a2x + b2y + c2 = 0
+            A = np.array([[self.a, self.b], [other.a, other.b]])
+            B = np.array([-self.c, -other.c])
+            det = np.linalg.det(A)  # 行列式
+            if abs(det) < 1e-10:  # 平行或重合
+                return None
+            # 求解交点
+            point = np.linalg.solve(A, B)
+            return point
+
+        def distance_to_point(self, point):
+            """计算点到直线的距离"""
+            p = np.array(point, dtype=float)
+            # 点到直线距离公式：|ax0 + by0 + c| / sqrt(a^2 + b^2)
+            numerator = abs(self.a * p[0] + self.b * p[1] + self.c)
+            denominator = np.sqrt(self.a ** 2 + self.b ** 2)
+            return numerator / denominator
+
+        def get_x(self, y):
+            if abs(self.a) < 1e-10:  # 检查 a 是否接近 0
+                return None  # 水平线，x 无唯一解
+            return -(self.b * y + self.c) / self.a
+
+        def get_y(self, x):
+            if abs(self.b) < 1e-10:  # 检查 b 是否接近 0
+                return None  # 垂直线，y 无唯一解
+            return -(self.a * x + self.c) / self.b
+
+        def shift(self,vector):
+            if isinstance(vector,Tools2D.Vector):
+                vector=vector.to_numpy()
+            else:
+                vector=Tools2D.Vector(vector).to_numpy()
+            dx, dy = vector
+            self.c = self.c - self.a * dx - self.b * dy
+
+        def to_sl(self, x_range=None, y_range=None):
+            """
+            x_range, y_range
+            """
+            if x_range is None and y_range is None:
+                raise ValueError('没有范围range无法把line求解成线段')
+
+            point = []
+            # 排序输入的范围,防止错误
+            if x_range is not None:
+                x_min, x_max = sorted([x_range[0], x_range[1]])
+                y_by_x_min, y_by_x_max = self.get_y(x_min), self.get_y(x_max)
+                if y_by_x_min is not None and y_by_x_max is not None:
+                    point.append([x_min, y_by_x_min])
+                    point.append([x_max, y_by_x_max])
+
+            if y_range is not None:
+                y_min, y_max = sorted([y_range[0], y_range[1]])
+                x_by_y_min, x_by_y_max = self.get_x(y_min), self.get_x(y_max)
+                if x_by_y_min is not None and x_by_y_max is not None:
+                    point.append([x_by_y_min, y_min])
+                    point.append([x_by_y_max, y_max])
+
+            point = np.array(point)
+            point = np.sort(point, axis=0)
+
+            # 计算中间两组点
+            mid_index = len(point) // 2  # 假设 point 的长度是偶数
+            mid_points = point[mid_index - 1:mid_index + 1]
+
+            # 返回线段
+            return Tools2D.Segment(mid_points[0], mid_points[1])
+
+        def to_numpy(self):
+            return np.array([self.a,self.b,self.c])
+
     class SegmentGroup:
 
         def __init__(self, *args):
@@ -286,159 +440,7 @@ class Tools2D:
             #TODO line_group,line|segment_group,segment_line|direct_gourp,direct_line|
             raise
 
-    class Line:
-        """
-        ax+by+c=0
-        """
-        def __init__(self, a=None, b=None, c=None, point_a=None, point_b=None, direct_point=None, *args):
-            """
-            初始化直线，可以通过以下方式：
-            1. 直接指定 a, b, c
-            2. 通过两点 point_a 和 point_b
-            3. 通过一点 point_a 和方向向量 direct_point
-            """
-            # 情况 1：直接提供 a, b, c
-            if a is not None and b is not None and c is not None:
-                if a == 0 and b == 0:
-                    raise ValueError("a 和 b 不能同时为 0，无法定义直线")
-                self.a = float(a)
-                self.b = float(b)
-                self.c = float(c)
 
-            # 情况 2：通过两点 point_a 和 point_b 定义直线
-            elif point_a is not None and point_b is not None:
-                # 转换为 NumPy 数组，确保输入是可计算的
-                p1 = np.array(point_a, dtype=float)
-                p2 = np.array(point_b, dtype=float)
-                if np.array_equal(p1, p2):
-                    raise ValueError("两点重合，无法定义直线")
-                # 两点式推导 ax + by + c = 0
-                # 设 point_a = (x1, y1), point_b = (x2, y2)
-                # a = y1 - y2, b = x2 - x1, c = x1y2 - x2y1
-                self.a = p1[1] - p2[1]  # y1 - y2
-                self.b = p2[0] - p1[0]  # x2 - x1
-                self.c = p1[0] * p2[1] - p2[0] * p1[1]  # x1*y2 - x2*y1
-                if self.a == 0 and self.b == 0:
-                    raise ValueError("计算结果无效，直线参数错误")
-
-            # 情况 3：通过一点 point_a 和方向向量 direct_point 定义直线
-            elif point_a is not None and direct_point is not None:
-                # 转换为 NumPy 数组
-                p = np.array(point_a, dtype=float)
-                d = np.array(direct_point, dtype=float)
-                if np.all(d == 0):
-                    raise ValueError("方向向量不能为零向量")
-                # 方向向量 (dx, dy) 的法向量是 (-dy, dx)
-                # 直线方程：-dy(x - x0) + dx(y - y0) = 0
-                self.a = -d[1]  # -dy
-                self.b = d[0]  # dx
-                self.c = d[1] * p[0] - d[0] * p[1]  # -dy*x0 + dx*y0
-                if self.a == 0 and self.b == 0:
-                    raise ValueError("计算结果无效，直线参数错误")
-
-            else:
-                raise ValueError("参数不足，请提供 a,b,c 或 point_a,point_b 或 point_a,direct_point")
-
-        def __str__(self):
-            """返回直线方程的字符串表示"""
-            if self.k is not None:
-                _b = self._kxb_b
-                if _b>0:
-                    return f'y={self.k}x+{_b}'
-                elif _b<0:
-                    return f'y={self.k}x{_b}'
-                else:
-                    return f'y={self.k}x'
-            else:
-                return f'x={-self.c/self.a}'
-
-        @property
-        def k(self):
-            """计算斜率，如果垂直则返回 None"""
-            if self.b == 0:
-                return None  # 垂直线，斜率无穷大
-            return -self.a / self.b
-        @property
-        def _kxb_b(self):
-            if self.b == 0:
-                return None  # 垂直线
-            return  -self.c/self.b
-
-        def intersects(self, other):
-            """计算与另一条直线的交点，若平行则返回 None"""
-            if not isinstance(other, Tools2D.line):
-                raise TypeError(f"必须与另一条直线对象比较,当前:{other}")
-            # 解线性方程组：a1x + b1y + c1 = 0 和 a2x + b2y + c2 = 0
-            A = np.array([[self.a, self.b], [other.a, other.b]])
-            B = np.array([-self.c, -other.c])
-            det = np.linalg.det(A)  # 行列式
-            if abs(det) < 1e-10:  # 平行或重合
-                return None
-            # 求解交点
-            point = np.linalg.solve(A, B)
-            return point
-
-        def distance_to_point(self, point):
-            """计算点到直线的距离"""
-            p = np.array(point, dtype=float)
-            # 点到直线距离公式：|ax0 + by0 + c| / sqrt(a^2 + b^2)
-            numerator = abs(self.a * p[0] + self.b * p[1] + self.c)
-            denominator = np.sqrt(self.a ** 2 + self.b ** 2)
-            return numerator / denominator
-
-        def get_x(self, y):
-            if abs(self.a) < 1e-10:  # 检查 a 是否接近 0
-                return None  # 水平线，x 无唯一解
-            return -(self.b * y + self.c) / self.a
-
-        def get_y(self, x):
-            if abs(self.b) < 1e-10:  # 检查 b 是否接近 0
-                return None  # 垂直线，y 无唯一解
-            return -(self.a * x + self.c) / self.b
-
-        def shift(self,vector):
-            if isinstance(vector,Tools2D.vector):
-                vector=vector.to_numpy()
-            else:
-                vector=Tools2D.vector(vector).to_numpy()
-            dx, dy = vector
-            self.c = self.c - self.a * dx - self.b * dy
-
-        def to_sl(self, x_range=None, y_range=None):
-            """
-            x_range, y_range
-            """
-            if x_range is None and y_range is None:
-                raise ValueError('没有范围range无法把line求解成线段')
-
-            point = []
-            # 排序输入的范围,防止错误
-            if x_range is not None:
-                x_min, x_max = sorted([x_range[0], x_range[1]])
-                y_by_x_min, y_by_x_max = self.get_y(x_min), self.get_y(x_max)
-                if y_by_x_min is not None and y_by_x_max is not None:
-                    point.append([x_min, y_by_x_min])
-                    point.append([x_max, y_by_x_max])
-
-            if y_range is not None:
-                y_min, y_max = sorted([y_range[0], y_range[1]])
-                x_by_y_min, x_by_y_max = self.get_x(y_min), self.get_x(y_max)
-                if x_by_y_min is not None and x_by_y_max is not None:
-                    point.append([x_by_y_min, y_min])
-                    point.append([x_by_y_max, y_max])
-
-            point = np.array(point)
-            point = np.sort(point, axis=0)
-
-            # 计算中间两组点
-            mid_index = len(point) // 2  # 假设 point 的长度是偶数
-            mid_points = point[mid_index - 1:mid_index + 1]
-
-            # 返回线段
-            return Tools2D.segment(mid_points[0], mid_points[1])
-
-        def to_numpy(self):
-            return np.array([self.a,self.b,self.c])
 
     class LineGroup:
         def __init__(self,*args):
@@ -790,13 +792,15 @@ class Screen_draw:
 
 if __name__ == "__main__":
     t = Tools2D()
+
+    # test-Tool2D.Segment.inter
     seg_1 = t.Segment(t.Point([1, 0]), t.Point([0, 1]))
     seg_2 = t.Segment(t.Point([0, 0]), t.Point([1, 1]))
-    print(seg_1.interaction(seg_2))
+    result_inter = seg_1.interaction(seg_2)
+    expected_inter = [0.5,0.5]
+    print('Tool2D.interaction:',np.array_equal(result_inter, expected_inter))
 
+    #test-Tool2D.Line.inter
+    l = seg_2.to_line()
+    print(l)
 
-
-    # l = seg_2.to_line()
-    # print(seg_1.to_line())
-    # print(l.to_sl([0,2],[0.5,1]).to_numpy())
-    # print(seg_1.interaction(seg_2))
