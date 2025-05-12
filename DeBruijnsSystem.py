@@ -1,21 +1,30 @@
-# -*- coding: utf-8 -*-
-import random
 import sys
 import time
-import multiprocessing
-import gc
-from PY5_2DToolkit import Tools2D
+import warnings
 import numpy as np
 import pandas as pd
-import warnings
+
+from PY5_2DToolkit import Tools2D
+
 from itertools import islice, product
-from tabulate import tabulate
-# import humanize
-from joblib import Parallel, delayed
+from tabulate import tabulate #print panda in easy read formal
+# import humanize # trans number to easy read (unit)
+from joblib import Parallel, delayed #multi processing
 
 tools = Tools2D()
 
-class BruijnsSystem:
+class DeBruijnsSystem:
+    """
+    parma:
+        _grid_config: core data of create girds
+        data_df: data of girds
+        _inter_df: inter_points location
+        tilling_object: class: new_class
+
+    method:
+        _create_gird: to create girds
+
+    """
     def __init__(self, sides: int = 5, origin_norm: int|float = 80, shifted_distance: int|float = 0, gap: int | list | tuple = 100,
                  center: tuple = (100, 100), max_num_of_line: int = 50):
         self._grid_config = {
@@ -698,7 +707,7 @@ def deep_get_size(obj, seen=None):
     return size
 
 if __name__ == "__main__":
-    a = BruijnsSystem(sides=5, max_num_of_line=20, shifted_distance=0)
+    a = DeBruijnsSystem(sides=5, max_num_of_line=20, shifted_distance=0)
     a(sides=5, max_num_of_line=500, shifted_distance=120,gap=12)
     t= a.tilling
     print(t.WFS(9))
