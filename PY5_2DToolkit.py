@@ -3,6 +3,7 @@ import math
 import warnings
 import shapely
 import pandas as pd
+from typing import Union
 
 def read_32bit_color(bit32_color):
     """
@@ -25,10 +26,27 @@ def create_32bit_color(r, g, b, a=255):
     bit32_color = (a << 24) | (r << 16) | (g << 8) | b
     return bit32_color
 
+Tools2D_interactable_type = Union[
+            "Tools2D.Segment",
+            "Tools2D.SegmentGroup",
+            "Tools2D.Line",
+            "Tools2D.LineGroup",
+            "Tools2D.DirectedLine",
+            "Tools2D.DirectedLineGroup"
+        ]
 
 class Tools2D:
 
-    class vector:
+    class Vector:
+        """
+        method:
+            change_norm
+            rotate
+            to_numpy
+            to_list
+        property:
+            norm
+        """
         def __init__(self, point_b,point_a=(0, 0)):
             self.np_l = None
             self.np_a = None
@@ -55,7 +73,7 @@ class Tools2D:
                 raise ValueError(f"不支持的对象point_a:{type(point_b)}:{point_b}")
 
         def __str__(self):
-            return f"({self.v_x}, {self.v_y})"
+            return f"Tools2D.Vector: ({self.v_x}, {self.v_y})"
 
         @property
         def norm(self):
@@ -96,53 +114,41 @@ class Tools2D:
         def to_list(self):
             return [self.v_x, self.v_y]
 
-    class vectors:
-        def __init__(self):
-            raise
-        def __add__(self, other):
-            raise
-
-    class point:
+    class Point:
         def __init__(self,point:list|tuple|np.ndarray):
-
             if not isinstance(point,np.ndarray):
                 self.point = np.array(point)
             else:
                 self.point = point
 
-        def to_list(self):
+        def to_list(self)->list:
             return self.point.tolist()
 
-    class segment:
+        def to_np(self)->np.ndarray:
+            return self.point
 
-        def __init__(self, a_point, b_point):
-            def to_np(v)->np.ndarray:
-                if isinstance(v, Tools2D.point):
-                    return v.point
-                elif isinstance(v, np.ndarray):
-                    return  v
-                elif isinstance(v, (list, tuple)):
-                    return np.array(v)
-                raise ValueError(f"不支持的对象:{type(v)}:{v}")
+    class Segment:
+        """
+        method:
+            shift
+        """
+        def __init__(self, a_point:"Tools2D.Point", b_point:"Tools2D.Point"):
+            self.a = a_point.to_np()
+            self.b = b_point.to_np()
+            self.s_np = None # self_ndarray_type
+            self.t_l = None # self_Line_class_object
 
-            self.a = to_np(a_point)
-            self.b = to_np(b_point)
-
-            self.s_np, self.t_l, self.ran = [None] * 3
 
         def __str__(self):
             l1, l2 = self.to_list()
-            return f'{l1}<-->{l2}'
+            return f'Tools2D.Segment: {l1}<-->{l2}'
 
-        def shift(self, vector):
-            if isinstance(vector,Tools2D.vector):
-                vector = vector
-            else:
-                vector = Tools2D.vector(vector).to_numpy()
-
+        def shift(self, vector:"Tools2D.Vector"):
+            vector = vector.to_numpy()
             self.a = self.a + vector
             self.b = self.b + vector
-            self.s_np, self.t_l, self.ran = [None] * 3
+            self.s_np = None # self_ndarray_type
+            self.t_l = None # self_Line_class_object
             return self
 
         def to_numpy(self):
@@ -155,31 +161,49 @@ class Tools2D:
 
         def to_line(self):
             if self.t_l is None:
-                self.t_l = Tools2D.line(point_a=self.a, point_b=self.b)
+                self.t_l = Tools2D.Line(point_a=self.a, point_b=self.b)
             return self.t_l
 
-        def interaction(self,other):
-            m = shapely.LineString(self.to_numpy())
-            o = shapely.LineString(other.to_numpy())
-            inter = m.intersection(o)
-            # 检查交集类型
-            if inter.is_empty:
-                return None  # 没有交点
-            else:
-                # 如果交集是点，返回坐标
-                if inter.geom_type == 'Point':
-                    return np.array([inter.x, inter.y])
-                elif inter.geom_type == 'LineString':
-                    # 如果交集是线，处理线的情况
-                    return None
+        def interaction(self, other:Tools2D_interactable_type):
+            if isinstance(other,Tools2D.Segment):
+                a_seg = shapely.LineString(self.to_numpy())
+                b_seg = shapely.LineString(other.to_numpy())
+                inter = a_seg.intersection(b_seg)
+                # 检查交集类型
+                if inter.is_empty:
+                    return None  # 没有交点
                 else:
-                    return None
+                    # 如果交集是点，返回坐标
+                    if inter.geom_type == 'Point':
+                        return np.array([inter.x, inter.y])
+                    elif inter.geom_type == 'LineString':
+                        # 如果交集是线，处理线的情况
+                        # 因为是有向线段，需要求两线段range交集
+                        # 目前使用inf代表无穷大代替
+                        return np.inf
+                    else:
+                        raise ValueError()
+            #there is lots of conditions need to think
+            #wait to continue...
+            #SegmentGroup, Line, LineGroup, DirectLine, DirectLineGroup
 
         @property
-        def range_x(self):
-            return np.sort(self.to_numpy()[:,0])
+        def range(self):
+            points = self.to_numpy()
+            x_range = [np.min(points[:, 0]), np.max(points[:, 0])]
+            y_range = [np.min(points[:, 1]), np.max(points[:, 1])]
+            return Tools2D.Range2D(x_range, y_range)
 
-    class segment_group:
+    class Range2D:
+        """
+        sometime range is like: [x1,x2] [y1,y2]
+        this class is to treat is condition
+        """
+        def __init__(self,x_range,y_range):
+            self.x_range = x_range
+            self.y_range = y_range
+
+    class SegmentGroup:
 
         def __init__(self, *args):
             self.sl_group = []
@@ -262,7 +286,7 @@ class Tools2D:
             #TODO line_group,line|segment_group,segment_line|direct_gourp,direct_line|
             raise
 
-    class line:
+    class Line:
         """
         ax+by+c=0
         """
@@ -416,7 +440,7 @@ class Tools2D:
         def to_numpy(self):
             return np.array([self.a,self.b,self.c])
 
-    class line_group:
+    class LineGroup:
         def __init__(self,*args):
             self.lines = []
             for i in args:
@@ -439,7 +463,7 @@ class Tools2D:
             # TODO line_group,line|segment_group,segment_line|direct_gourp,direct_line|
             raise
 
-    class direct_line:
+    class DirectedLine:
         def __init__(self,d_vector,l_point):
             raise
         def interaction(self):
@@ -447,7 +471,7 @@ class Tools2D:
             # TODO 可以使用Geo的Ray
             raise
 
-    class direct_line_group:
+    class DirectedLineGroup:
         def __init__(self,*args):
             raise
 
@@ -456,7 +480,7 @@ class Tools2D:
             # TODO 这时返回需要分为(positive,negative)
             raise
 
-    class curve:
+    class Curve:
         def __init__(self,curve_type='Bezier',*args):
             if curve_type:
                 raise
@@ -464,466 +488,9 @@ class Tools2D:
         def curve(self,*args):
             raise
 
-    class surface:
+    class Surface:
         def __int__(self,style='sketch'):
             raise
-
-    def interaction(self,a,b):
-        raise
-
-    def distance(self,a,b):
-        raise
-
-    @staticmethod
-    def reduce_errors_np(nums: list | np.ndarray, min_value:float|None = 1e-10, max_value:float|None = 1e10):
-        """
-        减少ndarray,list,tuple中的数值误差
-        1. 将绝对值小于min_value的值设置为零。
-        2. 将绝对值大于max_value的值设置为 NaN（非数字）。
-
-        Args:
-           nums (list | np.ndarray): 要处理的目标
-           min_value (None | float, 可选): 阈值，默认为 1e-10,低于此阈值（绝对值）的值被认为接近于零。
-                                               如果设置为None，则跳过此最小值减少步骤。 默认为 1e-10。
-           max_value (None | float, 可选): 同上,默认为 1e10
-
-        Returns:np.ndarray
-
-        Raises:
-           ValueError: 输入nums不是list,tuple or ndarray
-
-        """
-        if isinstance(nums,np.ndarray):
-            back_np = nums
-        elif isinstance(nums,(list,tuple)):
-            back_np = np.array(nums)
-        else:
-            raise ValueError (f"输入值类型错误:{nums},type:{type(nums)}")
-
-        if min_value:
-            back_np = np.where(np.abs(nums) < min_value, 0, back_np)
-        if max_value:
-            back_np = np.where(np.abs(nums) > max_value, np.nan, back_np)
-        return back_np
-
-    @staticmethod
-    def reduce_errors(num, max_value=1e10, min_value=1e-10):
-        """
-        如果接近无穷大返回None，接近无穷小返回0
-        """
-        if abs(num) > max_value:
-            return None
-        elif abs(num) < min_value:
-            return 0
-        return num
-
-    #=========================
-
-    def distance_2_points(self, point1, point2):
-        """
-        计算两点之间的距离，使用经典的平方根方法。
-
-        参数:
-        point1: 通用参数，可以是点的代号或[x, y]坐标。
-        point2: 同上。
-
-        返回:
-        float: 两点之间的距离。
-
-        异常:
-        ValueError: 输入的点格式错误或不在字典中。
-        """
-        x1, y1 = self.point_get_info(point1)['location']
-        x2, y2 = self.point_get_info(point2)['location']
-        return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-
-    @staticmethod
-    def vector_group_rotate_np(vector_group:list|np.ndarray, theta):
-        """
-        使用numpy方法旋转向量组
-        对每一个数值应用reduce_errors_np
-
-        参数:
-            vector_group (np.ndarray | list[list]): 要旋转的向量组或单个向量。
-                - NumPy数组,shape: (n, 2) 或 (2)
-                - Python列表: [[x1, y1], ...] 或 [x, y]
-            theta (float): 旋转角度（度）。正值为逆时针。
-
-        返回:
-            np.ndarray: 旋转后的向量组，形状与输入 `vector_group` 转换后的NumPy数组形状相同。
-
-        ValueError: 输入 vector_group 格式错误（非二维向量或列表深度错误）。
-        UserWarning: 输入为单个向量时发出警告。
-
-        示例:
-            Tools2D.vector_group_rotate_np(np.array([[1, 0], [0, 1]]), 45)
-        """
-
-        if isinstance(vector_group, np.ndarray):
-            if vector_group.ndim == 1 and len(vector_group) == 2:
-                #ndim:number of dimensions 实际取出来的是嵌套层数
-                warnings.warn(f"输入的是一个单独向量: {vector_group}")
-                vector_group = vector_group[np.newaxis, :]  # 将其转换为二维数组
-            elif vector_group.shape[1] != 2:
-                raise ValueError(f'输入的格式有误: {vector_group}')
-        elif isinstance(vector_group, (list, tuple)):
-            depth = Tools2D.list_depth(vector_group)
-            if depth != 2:
-                if depth == 1:
-                    warnings.warn(f"输入的是一个单独向量:{vector_group}")
-                    vector_group = [vector_group]
-                else:
-                    raise ValueError(f'输入的格式有误:{vector_group}')
-            vector_group = np.array(vector_group)
-        else:
-            raise ValueError(f'输入的格式有误:{vector_group}')
-
-        # 将角度转换为弧度
-        theta = np.deg2rad(theta)
-
-        # 旋转矩阵
-        rotation_matrix = np.array([
-            [np.cos(theta), -np.sin(theta)],
-            [np.sin(theta), np.cos(theta)]
-        ])
-
-        rotated_vector = vector_group @ rotation_matrix.T  # 旋转向量
-
-        # 处理接近0的浮点数
-        rotated_vector = Tools2D.reduce_errors_np(rotated_vector, max_value=None)
-
-        return rotated_vector
-
-    # ////////////《线操作》////////////
-
-    def directed_line_to_line(self, line_letter_or_detail_dic, temp=True):
-        if isinstance(line_letter_or_detail_dic, dict):
-            detail_dic = line_letter_or_detail_dic
-        else:
-            if line_letter_or_detail_dic not in self.line_dic:
-                raise ValueError("没有找到直线，直线还未创建")
-            detail_dic = self.line_dic[line_letter_or_detail_dic]
-
-        if 'direction_vector' not in detail_dic or 'location_point' not in detail_dic:
-            raise KeyError("有向直线的描述字典缺少必要的字段 'direction_vector' 或 'location_point'")
-
-        vx, vy = detail_dic['direction_vector']
-        lx, ly = detail_dic['location_point']
-        if vx == 0:  # 垂直线
-            # 垂直线公式：0y = -1x + b → x = b
-            # 参数k在此场景下仅为占位符，固定为-1
-            return self.line_drop(a=0, k=-1, b=lx, temp=temp)
-        else:  # 常规线(包括水平)
-            k = vy / vx
-            b = ly - k * lx
-            return self.line_drop(a=1, k=k, b=b, temp=temp)
-
-    def inter_line_group_np(self,lines_a:list,lines_b:list, x_range: list | tuple = None, y_range: list | tuple = None):
-        """
-
-        计算两组直线的交点，使用 NumPy 批量处理。
-
-        Args:
-            lines_a (list): 第一组直线的列表，每个元素可以是：
-                - dict: 包含直线参数 {'k': 斜率, 'b': 截距}，若包含 'a'，则 a=0，表示 0=kx+b
-                - str/int/...: self.line_dic 中的直线 ID（不可变对象）
-            lines_b (list): 第二组直线的列表，格式同 lines_a
-
-        Returns:
-            numpy.ndarray: 交点坐标矩阵，形状为 (N, M, 2)
-                - N: lines_a 中的直线数量
-                - M: lines_b 中的直线数量
-                - 2: 每个交点的 [x, y] 坐标
-                - 若交点不存在（平行线），对应位置值为 NaN
-
-        Notes:
-            - 使用齐次坐标系和叉积计算交点。
-            - 利用 NumPy 的广播机制实现批量计算。
-            - 输出矩阵的第 (i, j) 个元素表示 lines_a[i] 和 lines_b[j] 的交点。
-            - 对平行线（w 接近零）的情况返回 NaN。
-            - 使用阈值 1e-6 判断平行线。
-
-        """
-        a_np,b_np = self._trans_line_to_matrix(lines_a),self._trans_line_to_matrix(lines_b)
-        # n_num = a_np.shape[0]
-        # m_num = b_np.shape[0]
-        # a_np: N * 3 | b_np: M * 3
-        # 利用python-numpy中的广播机制 批量求解线段和直线的交点
-        a_np = a_np[:, np.newaxis, :]  # N * 1 * 3
-        b_np = b_np[np.newaxis, :, :]  # 1 * M * 3
-        inter_homo = np.cross(a_np,b_np)# N * M * 3
-        x, y, w = inter_homo[:, :, 0], inter_homo[:, :, 1], inter_homo[:, :, 2]
-
-        # 计算掩码
-        mask_no_inter = np.abs(w) > 1e-6  # 设置一个阈值来判断 w 是否接近零
-        final_mask = mask_no_inter
-        if x_range:
-            x_min, x_max = sorted(x_range)
-            mask_x = (x_min <= x) & (x <= x_max)
-            final_mask = final_mask & mask_x
-        if y_range:
-            y_min, y_max = sorted(y_range)
-            mask_y = (y_min <= y) & (y <= y_max)
-            final_mask = final_mask & mask_y
-
-        # 应用掩码计算最终结果
-        inter_points_np = np.full_like(inter_homo[:, :, :2], [np.nan,np.nan], dtype=np.float64)
-        # [:, :, :2] 索引切片 取[x,y] 原axis:2-->[x,y,w]
-        inter_points_np[final_mask, 0] = self.reduce_errors_np(x[final_mask] / w[final_mask])  # 计算 x' = x / w
-        inter_points_np[final_mask, 1] = self.reduce_errors_np(y[final_mask] / w[final_mask])  # 计算 y' = y / w
-        return inter_points_np
-
-    def intersection_line_and_Segmentline(self, segline_chain, line='a'):
-        """
-        经典方法 查找两条线段交点，无交点返回None
-        """
-        Aletter, Bletter = segline_chain.split('-')
-        A = self.point_dic[Aletter]
-        B = self.point_dic[Bletter]
-        Ax, Ay = A
-        Bx, By = B
-        seg_rangeX, seg_rangeY = [min([Ax, Bx]), max([Ax, Bx])], [min([Ay, By]), max([Ay, By])]
-
-        # 根据投影判断是否可能存在交点
-        if not 'a' in self.line_dic[line]:
-            if self.line_dic[line]['k'] != 0:
-                line_shadow_y1 = self.line_dic[line]['k'] * seg_rangeX[0] + self.line_dic[line]['b']
-                line_shadow_y2 = self.line_dic[line]['k'] * seg_rangeX[1] + self.line_dic[line]['b']
-                line_shadow_Rangey = [min([line_shadow_y1, line_shadow_y2]), max([line_shadow_y1, line_shadow_y2])]
-                line_shadow_x1 = (seg_rangeY[0] - self.line_dic[line]['b']) / self.line_dic[line]['k']
-                line_shadow_x2 = (seg_rangeY[1] - self.line_dic[line]['b']) / self.line_dic[line]['k']
-                line_shadow_Rangex = [min([line_shadow_x1, line_shadow_x2]), max([line_shadow_x1, line_shadow_x2])]
-                final_range_x = [max(line_shadow_Rangex[0], seg_rangeX[0]), min(line_shadow_Rangex[1], seg_rangeX[1])]
-                final_range_y = [max(line_shadow_Rangey[0], seg_rangeY[0]), min(line_shadow_Rangey[1], seg_rangeY[1])]
-                if final_range_x[0] > final_range_x[1] or final_range_y[0] > final_range_y[1]:
-                    # 范围无效 不存在交点
-                    return None
-                else:
-                    if final_range_x[0] == final_range_x[1] and final_range_y[0] == final_range_y[1]:
-                        # raise ValueError('范围仅为一个点')
-                        print('范围仅为一个点')
-                        letter_theline = self.Segmentline_to_line(segline_chain)
-                        if self.line_solve(letter_theline, x=final_range_x[0]) == final_range_y[0]:
-                            # 如果把点的x坐标带入直线中，得到的y值刚好是点的y坐标
-
-                            return [final_range_x[0], final_range_y[0]]
-                        else:
-                            return None
-                    temp_Ax, temp_Bx = final_range_x[0], final_range_x[1]
-                    temp_Ay = self.line_solve(line, x=temp_Ax)
-                    temp_By = self.line_solve(line, x=temp_Bx)
-                    temp_A, temp_B = [temp_Ax, temp_Ay], [temp_Bx, temp_By]
-                    inter_point = self.intersection_2_Segmentline([temp_A, temp_B], [A, B])
-                    return inter_point
-            else:
-                # k=0时候，y=b 只需要比较线段的y范围是否包含b
-                if seg_rangeY[0] <= self.line_dic[line]['b'] <= seg_rangeY[1]:
-                    value_y = self.line_dic[line]['b']
-                    the_line = self.Segmentline_to_line(segline_chain)
-                    value_x = self.line_solve(the_line, y=value_y)
-                    return [value_x, value_y]
-                else:
-                    return None
-        else:
-            if self.line_dic[line]['k'] != 0:
-                raise ValueError("a=0 且 k=0 ：输入的是一个点而不是线")
-            # a=0时候,x=b/-k 是一条垂直线 只需要比较线段的x范围是否包含b/-k
-            if seg_rangeY[0] <= self.line_dic[line]['b'] / -self.line_dic[line]['k'] <= seg_rangeY[1]:
-                value_x = self.line_dic[line]['b'] / -self.line_dic[line]['k']
-                the_line = self.Segmentline_to_line(segline_chain)
-                value_y = self.line_solve(the_line, x=value_x)
-                return [value_x, value_y]
-            else:
-                return None
-
-    def distance_point_to_line(self, point, line):
-        # linedic例子:{'a': {'str': 'y=3x+100', 'k': 3, 'b': 100}}
-        point_x = point[0]
-        point_y = point[1]
-        if isinstance(line, dict):
-            detail_line_dic = line
-        elif isinstance(line, str):
-            detail_line_dic = self.line_dic[line]
-        else:
-            raise ValueError(f"输入的line不合符规范，为：{line}")
-
-        if detail_line_dic['k'] == 0:
-            # 输入的line是一条水平线
-            return abs(detail_line_dic['b'] - point_y)
-        if 'a' in detail_line_dic:
-            # 输入的是一条垂直线
-            # 存在a键的时候 a必定为0 且k必定为-1(line_drop中就是这么规定的)
-            return abs(detail_line_dic['b'] - point_x)
-        k_orth = -1 / detail_line_dic['k']
-        # 斜率是-1/k的时候垂直
-        result = self.line_solve_general(a=1, k=k_orth, x=point_x, y=point_y)
-        b = result['b']
-        line_orth_dic = self.line_drop(temp=True, k=k_orth, b=b, a=1)
-        point = [point_x, point_y]
-        point_inter = self.intersection_2line(line_orth_dic, detail_line_dic)
-        return self.distance_2_points(point, point_inter)
-
-    # ////////////《面操作》////////////
-    def surface_drop_by_chain(self, chain_of_point, floor=0, color=create_32bit_color(200, 200, 20, 255), fill=False,
-                              stroke=None,
-                              stroke_color=create_32bit_color(0, 0, 0)):
-        """
-        【center】会自动生成在参数字典中：重心:是所有顶点坐标的平均值
-        这里输入的链是不一定需要收尾相接的,如果不相接会自动补全
-        """
-        surf_pointgroup = []
-        alist_of_point = chain_of_point.split('-')
-        for aletter in alist_of_point:
-            point_xy = self.point_dic.get(aletter, 0)
-            if point_xy != 0:
-                surf_pointgroup.append(point_xy)
-            else:
-                return "false:cant find point by letter"
-        self.surface_chain_to_Segline_group(chain_of_point, visible=False)  # 确保线段都创建了
-        nowdic = {}
-        nowdic['floor'] = floor
-        all_x, all_y = 0, 0
-        for x, y in surf_pointgroup:
-            all_x, all_y = all_x + x, all_y + y
-        center = [all_x / len(surf_pointgroup), all_y / len(surf_pointgroup)]
-        nowdic['center'] = center
-        nowdic['local'] = surf_pointgroup
-        nowdic['color'] = color
-        nowdic['fill'] = fill
-        nowdic['stroke'] = stroke
-        nowdic['stroke_color'] = stroke_color
-        self.surface_dic[chain_of_point] = nowdic
-        return surf_pointgroup
-
-
-    def surface_drop_by_pointlist(self, apointlist, floor=0, color=create_32bit_color(200, 200, 20, 255), fill=False,
-                                  stroke=None,
-                                  stroke_color=create_32bit_color(0, 0, 0)):
-        """
-        这里输入的链是不需要收尾相接的,如果不相接会自动补全
-        """
-        theletter = self.point_drop_group(apointlist)
-        chain = "-".join(theletter)
-        self.surface_drop_by_chain(chain, floor, color, fill, stroke, stroke_color)
-
-
-    def surface_chain_to_Segline_group(self, chain, floor=0, color=create_32bit_color(0, 0, 0, 255), stroke_weight=3,
-                                       visible=True):
-        """
-        给定一个字符串A-B-C,返回[A-B][B-C][C-A](返回的是首尾相接的,输入的不一定需要收尾相接)
-        如果seglinedic中不存在这个线段 那么就会自动创建
-        :param chain: 文本型，一个字符串 例：A-B-C
-        :return: [A-B][B-C][C-A]
-        """
-        nodes = chain.split("-")  # 将链式结构分解为节点列表["A", "B", "C"]
-        # 生成相邻对
-        pairs = [(nodes[i], nodes[i + 1]) for i in range(len(nodes) - 1)]
-        if nodes[0] != nodes[-1]:
-            # 如果第一个点和最后一个点不一致,加入首尾连接
-            pairs.append((nodes[-1], nodes[0]))  # 结果: [('A', 'B'), ('B', 'C'), ('C', 'D'), ('D', 'A')]
-        formatted_pairs = [f"{a}-{b}" for a, b in pairs]
-        for i in formatted_pairs:
-            # 检查是否已经创建了线段 如果不存在就创建线段
-            if i in self.Segmentline_dic in self.Segmentline_dic:
-                continue
-            else:
-                q = i.split('-')
-                self.Segmentline_drop(q[0], q[1], floor=floor, color=color, stroke_weight=stroke_weight, visible=visible)
-        return formatted_pairs
-
-
-    def is_point_in_surface(self, polx, P):
-        """
-           polx接受列表型 也接受非齐次坐标矩阵
-           判断点 P 是否在 polx 中（包括在边上）
-           polx: 多边形的顶点矩阵 [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
-           P: 点的坐标 [x, y]
-           return: 'inside' 如果点在内部, 'on_edge' 如果点在边上, 'outside' 如果点在外部
-        """
-
-        # 应当检查符号chain，给定的四边形是否已经闭合，若已经闭合 不可以用下文的
-        # polx[(i + 1) % len(polx)]
-        # 而应该改用
-        # polx[i+1]
-        def cross_product(A, B, P):
-            # 计算叉积
-            A = np.array(A)
-            B = np.array(B)
-            P = np.array(P)
-            AB = B - A
-            AP = P - A
-            return np.cross(AB, AP)
-
-        def is_point_on_segment(A, B, P):
-            """
-            判断点 P 是否在线段 AB 上
-            :param A: 线段起点 [x1, y1]
-            :param B: 线段终点 [x2, y2]
-            :param P: 待检测点 [x, y]
-            :return: True 如果 P 在线段 AB 上, 否则 False
-            """
-            # 叉积为 0 且点在线段范围内
-            A = np.array(A)
-            B = np.array(B)
-            P = np.array(P)
-            cross = cross_product(A, B, P)
-            # 判断叉积是否为 0
-            if abs(cross) > 1e-10:  # 允许微小误差
-                return False
-            # 判断是否在范围内
-            dot_product = np.dot(P - A, B - A)  # 投影点是否在 A->B 的方向上
-            squared_length = np.dot(B - A, B - A)  # AB 的平方长度
-            return 0 <= dot_product <= squared_length
-
-        # 检查每条边
-        on_edge = False
-        signs = []
-        for i in range(len(polx)):
-            A = polx[i]
-            B = polx[(i + 1) % len(polx)]  # 四边形是闭合的
-            if is_point_on_segment(A, B, P):  # 点在边上
-                on_edge = True
-            signs.append(cross_product(A, B, P))
-
-        # 检查所有符号是否一致
-        if all(s > 0 for s in signs) or all(s < 0 for s in signs):
-            return 'inside' if not on_edge else 'on_edge'
-        return 'on_edge' if on_edge else 'outside'
-
-
-    def regular_polygon(self, sides, side_length):
-        """。
-        参数：
-        - sides: 正多边形的边数。
-        - side_length: 正多边形的边长。
-        返回:
-        多边形点的列表(顺时针方向)
-        """
-
-        def split_2pi(times):
-            """
-            将 2π 弧度 分成 times 等份。
-            返回每份的弧度值。
-            """
-            return 2 * np.pi / times  # 360 度 = 2π 弧度
-
-        if sides < 3:
-            raise ValueError("边数必须大于或等于 3")
-        if side_length <= 0:
-            raise ValueError("边长必须大于 0")
-
-        # 计算中心角的一半（theta / 2）
-        theta = split_2pi(sides)  # 中心角的弧度值
-        half_theta = theta / 2
-        # 计算半径
-        radius = side_length / 2 / np.sin(half_theta)
-        point_start = [0, radius]  # 第一个点是从原点出发沿着y轴正方向前进的
-        back_list = [point_start]
-        for i in range(1, sides):
-            point = self.vector_rotate(point_start, np.rad2deg(theta) * i)
-            back_list.append(point)
-        return back_list
-
 
 class Screen_draw:
     def __init__(self, py5):
@@ -1220,16 +787,16 @@ class Screen_draw:
         y = self.py5.height / 2 - y
         return [x, y]
 
-def custom_formatwarning(message, category, filename, lineno, line=None):
-    return f"\033[31m{filename}:{lineno}: {category.__name__}: {message}\033[0m\n"
-# 应用自定义格式
-warnings.formatwarning = custom_formatwarning
 
 if __name__ == "__main__":
     t = Tools2D()
-    seg_1 = t.segment([1, 2], [2, 1])
-    seg_2 = t.segment([1, 1], [2, 2])
-    l = seg_2.to_line()
-    print(seg_1.to_line())
-    print(l.to_sl([0,2],[0.5,1]).to_numpy())
+    seg_1 = t.Segment(t.Point([1, 0]), t.Point([0, 1]))
+    seg_2 = t.Segment(t.Point([0, 0]), t.Point([1, 1]))
     print(seg_1.interaction(seg_2))
+
+
+
+    # l = seg_2.to_line()
+    # print(seg_1.to_line())
+    # print(l.to_sl([0,2],[0.5,1]).to_numpy())
+    # print(seg_1.interaction(seg_2))
