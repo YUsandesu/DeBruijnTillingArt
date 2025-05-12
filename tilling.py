@@ -1,5 +1,5 @@
 import random
-import BruijnsSystem
+import DeBruijnsSystem
 from the_control import *
 from PY5_2DToolkit import *
 import pandas as pd
@@ -38,8 +38,8 @@ def draw():
 
 if __name__ == "__main__":
     tool = Tools2D()
-    a = BruijnsSystem.BruijnsSystem(sides=5,gap=13,shifted_distance=21,origin_norm=30,max_num_of_line=850)
-    b = BruijnsSystem.BruijnsSystem(sides=5,gap=13,shifted_distance=11,origin_norm=30,max_num_of_line=850)
+    a = BruijnsSystem.DeBruijnsSystem(sides=5, gap=13, shifted_distance=21, origin_norm=30, max_num_of_line=850)
+    b = BruijnsSystem.DeBruijnsSystem(sides=5, gap=13, shifted_distance=11, origin_norm=30, max_num_of_line=850)
     #TODO 应该在在gird中把当前tilling的点画出来.
     print('Gird-finish')
     till = a.tilling
