@@ -2,4 +2,4 @@
 
 可視化のためには、このブランチに含まれる「Tilling.py」を実行してください。
 
-「DeBruijnTillingArt.py」はプロサイス生成の部分です。
+なお、「BruijnsSystem.py」は、プロセス生成部分の処理を担当しています。
