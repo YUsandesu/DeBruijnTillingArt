@@ -1,6 +1,6 @@
 from the_control import *
 from PY5_2DToolkit import *
-from BruijnsSystem import BruijnsSystem
+from DeBruijnsSystem import DeBruijnsSystem
 import pandas as pd
 
 #max_num_of_line超过400条容易卡死
@@ -78,7 +78,7 @@ if __name__ == "__main__":
         py5.color(255, 0, 125),
         py5.color(255, 125, 0),
     ]  # 颜色常量
-    bs = BruijnsSystem()
+    bs = DeBruijnsSystem()
     py5.run_sketch()
 
 
